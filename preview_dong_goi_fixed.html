@@ -154,7 +154,7 @@ async function taoKien(){
   const ten=document.getElementById('tenKienMoi').value.trim();
   if(!ma||!ten){toast('Nhập đủ mã kiện và tên kiện');return}
   try{
-    const res=await fetch(API,{method:'POST',body:JSON.stringify({action:'taoKien',maKien:ma,tenKien:ten})});
+    const res = await fetch(`${API}?action=taoKien&maKien=${encodeURIComponent(ma)}&tenKien=${encodeURIComponent(ten)}`);
     const d=await res.json();
     if(d.success){
       activeKien={maKien:ma,tenKien:ten}; localStorage.setItem('active_kien',JSON.stringify(activeKien));
