@@ -238,7 +238,9 @@ async function onScan(index){
 async function themVaoKien(){
   if(!activeKien||!currentItem)return;
   try{
-    const res=await fetch(API,{method:'POST',body:JSON.stringify({action:'themVaoKien',maKien:activeKien.maKien,tenKien:activeKien.tenKien,index:currentItem.index,nguoiQuet:'',})});
+    const res = await fetch(
+`${API}?action=themVaoKien&maKien=${encodeURIComponent(activeKien.maKien)}&tenKien=${encodeURIComponent(activeKien.tenKien)}&index=${encodeURIComponent(currentItem.index)}`
+);
     const d=await res.json();
     if(d.success){
       history.unshift({time:new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}),maKien:activeKien.maKien,index:currentItem.index,label:currentItem.label});
