@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Đóng gói">
+<title>Đóng gói nội thất</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root{
+  --main:#F47A20;--main-dk:#B95008;--bg:#FFF7EF;--card:#fff;--text:#1f160f;--muted:#7b6a5d;
+  --ok:#16834A;--err:#C0392B;--warn:#B7600A;--line:#ead8c8;--shadow:0 3px 14px rgba(120,65,10,.12);--r:16px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);padding-bottom:78px}
+.screen{display:none;min-height:100vh}.screen.active{display:block}
+.hdr{background:linear-gradient(135deg,var(--main),var(--main-dk));color:#fff;padding:18px 18px 16px}
+.hdr-title{font-size:22px;font-weight:800}.hdr-sub{font-size:13px;opacity:.88;margin-top:2px}
+.body{padding:14px;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+.card-head{padding:12px 14px;border-bottom:1px solid var(--line);font-weight:800;color:var(--main-dk);font-size:14px}
+.card-body{padding:14px}
+label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:5px}
+input,select,textarea{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:12px;font-size:15px;background:#fff;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--main)}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.btn{width:100%;border:none;border-radius:13px;padding:14px;font-size:16px;font-weight:800;cursor:pointer}
+.btn-main{background:var(--main);color:#fff}.btn-outline{background:#fff;color:var(--main-dk);border:1.5px solid var(--main)}
+.btn-gray{background:#eee;color:#777;pointer-events:none}.btn-red{background:var(--err);color:#fff}
+.pill{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:800}
+.pill-ok{background:#E8F6EF;color:var(--ok)}.pill-warn{background:#FFF0D9;color:var(--warn)}.pill-err{background:#FDECEA;color:var(--err)}
+.scan-box{position:relative;background:#111;border-radius:14px;overflow:hidden;aspect-ratio:1;display:flex;align-items:center;justify-content:center}
+#reader{width:100%!important}.scan-line{position:absolute;left:20px;right:20px;height:2px;background:linear-gradient(90deg,transparent,#fff,transparent);animation:scan 1.8s linear infinite;display:none}
+@keyframes scan{0%{top:18px}100%{top:calc(100% - 18px)}}
+.info{display:flex;gap:8px;margin:7px 0}.k{min-width:80px;color:var(--muted);font-size:12px}.v{font-size:14px;font-weight:700;line-height:1.35}
+.kien-item,.log-item{background:#fff;border-radius:14px;box-shadow:var(--shadow);padding:13px;margin-bottom:10px}
+.kien-title{font-weight:900;color:var(--main-dk);font-size:16px}.meta{font-size:12px;color:var(--muted);margin-top:4px}
+.bar{height:6px;background:#eee2d7;border-radius:999px;overflow:hidden;margin-top:9px}.fill{height:100%;background:var(--main)}
+.nav{position:fixed;left:0;right:0;bottom:0;height:72px;background:#fff;border-top:1px solid var(--line);display:flex;z-index:10}
+.nav button{flex:1;background:none;border:none;color:var(--muted);font-size:11px;font-weight:700}.nav button.active{color:var(--main)}
+.nav svg{width:23px;height:23px;display:block;margin:0 auto 3px;stroke:currentColor}
+.toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%) translateY(20px);background:#1f160f;color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;opacity:0;transition:.25s;z-index:99;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.empty{text-align:center;color:var(--muted);padding:25px 10px}
+.small{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="screen active" id="sc-donggoi">
+  <div class="hdr"><div class="hdr-title">Đóng gói</div><div class="hdr-sub" id="activeKienText">Chưa chọn kiện đang đóng</div></div>
+  <div class="body">
+    <div class="card">
+      <div class="card-head">Kiện đang đóng</div>
+      <div class="card-body">
+        <div class="row">
+          <button class="btn btn-outline" onclick="openTaoKien()">+ Tạo kiện</button>
+          <button class="btn btn-outline" onclick="loadKien(true)">Chọn kiện</button>
+        </div>
+        <div id="chonKienBox" style="display:none;margin-top:10px">
+          <label>Chọn kiện</label>
+          <select id="selectKien" onchange="setActiveKien(this.value)"></select>
+        </div>
+        <div id="taoKienBox" style="display:none;margin-top:10px">
+          <div class="row">
+            <div><label>Mã kiện</label><input id="maKienMoi" placeholder="VD: K001"></div>
+            <div><label>Tên kiện</label><input id="tenKienMoi" placeholder="VD: Tủ bếp"></div>
+          </div>
+          <button class="btn btn-main" style="margin-top:10px" onclick="taoKien()">Tạo kiện</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body" style="padding:12px">
+        <div class="scan-box"><div id="reader"></div><div class="scan-line" id="scanLine"></div></div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn btn-outline" onclick="nhapTay()">Nhập tay</button>
+          <button class="btn btn-main" id="btnCamera" onclick="toggleCamera()">Bật camera</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="resultBox" style="display:none">
+      <div class="card">
+        <div class="card-head">Thông tin chi tiết</div>
+        <div class="card-body">
+          <span class="pill pill-ok" id="qrBadge">QR</span>
+          <div class="info"><span class="k">Tên kiện</span><span class="v" id="rKien"></span></div>
+          <div class="info"><span class="k">Chi tiết</span><span class="v" id="rLabel"></span></div>
+          <div class="info"><span class="k">Kích thước</span><span class="v" id="rSize"></span></div>
+          <div class="info"><span class="k">Vật liệu</span><span class="v" id="rMat"></span></div>
+          <button class="btn btn-main" style="margin-top:12px" onclick="themVaoKien()">Thêm vào kiện đang đóng</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="sc-kien">
+  <div class="hdr"><div class="hdr-title">Kiện hàng</div><div class="hdr-sub" id="kienSummary">Danh sách kiện đóng gói</div></div>
+  <div class="body">
+    <button class="btn btn-outline" onclick="loadKien()">↻ Làm mới</button>
+    <div id="kienList"><div class="empty">Đang tải...</div></div>
+  </div>
+</div>
+
+<div class="screen" id="sc-lichsu">
+  <div class="hdr"><div class="hdr-title">Lịch sử quét</div><div class="hdr-sub" id="historyCount">0 lần quét</div></div>
+  <div class="body"><div id="historyList"><div class="empty">Chưa có lịch sử.</div></div></div>
+</div>
+
+<nav class="nav">
+  <button class="active" id="nav-donggoi" onclick="go('donggoi')">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h7v7h-7z"/></svg>Đóng gói
+  </button>
+  <button id="nav-kien" onclick="go('kien')">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z"/><path d="M3.3 7L12 12l8.7-5"/></svg>Kiện
+  </button>
+  <button id="nav-lichsu" onclick="go('lichsu')">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Lịch sử
+  </button>
+</nav>
+<div class="toast" id="toast"></div>
+
+<script>
+// DÁN LINK WEB APP APPS SCRIPT VÀO ĐÂY
+const API = 'DAN_LINK_APPS_SCRIPT_WEB_APP_VAO_DAY';
+
+let activeKien = JSON.parse(localStorage.getItem('active_kien') || 'null');
+let currentItem = null, scanner = null, cameraOn = false;
+let history = JSON.parse(localStorage.getItem('donggoi_history') || '[]');
+updateActiveText();
+
+function go(s){
+  document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));
+  document.getElementById('sc-'+s).classList.add('active');
+  document.getElementById('nav-'+s).classList.add('active');
+  if(s==='kien') loadKien();
+  if(s==='lichsu') renderHistory();
+}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(window.tt);window.tt=setTimeout(()=>t.classList.remove('show'),2200)}
+function updateActiveText(){
+  document.getElementById('activeKienText').textContent = activeKien ? `Kiện đang đóng: ${activeKien.maKien} - ${activeKien.tenKien}` : 'Chưa chọn kiện đang đóng';
+}
+function openTaoKien(){
+  document.getElementById('taoKienBox').style.display='block';
+  document.getElementById('chonKienBox').style.display='none';
+}
+async function taoKien(){
+  const ma=document.getElementById('maKienMoi').value.trim();
+  const ten=document.getElementById('tenKienMoi').value.trim();
+  if(!ma||!ten){toast('Nhập đủ mã kiện và tên kiện');return}
+  try{
+    const res=await fetch(API,{method:'POST',body:JSON.stringify({action:'taoKien',maKien:ma,tenKien:ten})});
+    const d=await res.json();
+    if(d.success){
+      activeKien={maKien:ma,tenKien:ten}; localStorage.setItem('active_kien',JSON.stringify(activeKien));
+      updateActiveText(); document.getElementById('taoKienBox').style.display='none'; toast('Đã tạo kiện');
+    } else toast(d.error||'Không tạo được kiện');
+  }catch(e){toast('Lỗi kết nối')}
+}
+async function loadKien(showSelect=false){
+  if(showSelect) document.getElementById('chonKienBox').style.display='block';
+  try{
+    const res=await fetch(`${API}?action=listKien`);
+    const d=await res.json();
+    const items=d.items||[];
+    if(showSelect){
+      const sl=document.getElementById('selectKien');
+      sl.innerHTML='<option value="">-- Chọn kiện --</option>'+items.map(k=>`<option value="${k.Ma_Kien}">${k.Ma_Kien} - ${k.Ten_Kien}</option>`).join('');
+      window.kienItems=items;
+    }
+    renderKien(items);
+  }catch(e){document.getElementById('kienList').innerHTML='<div class="empty">Lỗi tải dữ liệu.</div>'}
+}
+function setActiveKien(ma){
+  const k=(window.kienItems||[]).find(x=>String(x.Ma_Kien)===String(ma));
+  if(!k)return;
+  activeKien={maKien:k.Ma_Kien,tenKien:k.Ten_Kien};
+  localStorage.setItem('active_kien',JSON.stringify(activeKien));
+  updateActiveText(); toast('Đã chọn kiện '+k.Ma_Kien);
+}
+function renderKien(items){
+  const el=document.getElementById('kienList');
+  if(!items.length){el.innerHTML='<div class="empty">Chưa có kiện.</div>';return}
+  let du=0,dang=0;
+  el.innerHTML=items.map(k=>{
+    const tong=Number(k.Tong_Tam||0), da=Number(k.Da_Quet||0), thieu=Math.max(tong-da,0);
+    const pct=tong?Math.min(100,Math.round(da/tong*100)):0;
+    const done= tong>0 && thieu===0;
+    done?du++:dang++;
+    return `<div class="kien-item" onclick="setActiveKien('${k.Ma_Kien}')">
+      <div class="kien-title">${k.Ma_Kien} - ${k.Ten_Kien}</div>
+      <div class="meta">${da}/${tong} tấm · còn thiếu ${thieu}</div>
+      <div style="margin-top:6px"><span class="pill ${done?'pill-ok':'pill-warn'}">${done?'Đủ - đóng được':'Đang đóng'}</span></div>
+      <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
+    </div>`
+  }).join('');
+  document.getElementById('kienSummary').textContent=`${du} kiện đủ · ${dang} kiện đang đóng`;
+}
+function toggleCamera(){cameraOn?stopCamera():startCamera()}
+function startCamera(){
+  scanner=new Html5Qrcode('reader');
+  document.getElementById('btnCamera').textContent='Tắt camera';
+  document.getElementById('btnCamera').className='btn btn-outline';
+  document.getElementById('scanLine').style.display='block';
+  scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:220,height:220}},txt=>{stopCamera();onScan(txt.trim())},()=>{})
+    .then(()=>cameraOn=true).catch(()=>toast('Không mở được camera'));
+}
+function stopCamera(){
+  if(scanner&&cameraOn){scanner.stop().catch(()=>{});cameraOn=false}
+  document.getElementById('btnCamera').textContent='Bật camera';
+  document.getElementById('btnCamera').className='btn btn-main';
+  document.getElementById('scanLine').style.display='none';
+}
+function nhapTay(){stopCamera();const v=prompt('Nhập mã QR / index');if(v)onScan(v.trim())}
+async function onScan(index){
+  if(!activeKien){toast('Hãy tạo hoặc chọn kiện trước');return}
+  try{
+    toast('Đang tra QR...');
+    const res=await fetch(`${API}?action=lookup&index=${encodeURIComponent(index)}&maKien=${encodeURIComponent(activeKien.maKien)}`);
+    const d=await res.json();
+    if(!d.found){toast('Không tìm thấy QR');return}
+    currentItem=d;
+    document.getElementById('resultBox').style.display='block';
+    document.getElementById('qrBadge').textContent='QR #'+d.index;
+    document.getElementById('rKien').textContent=d.tenKien||'';
+    document.getElementById('rLabel').textContent=d.label||'';
+    document.getElementById('rSize').textContent=d.kichThuoc||'';
+    document.getElementById('rMat').textContent=d.vatLieu||'';
+    if(d.trung) toast('⚠ QR này đã có trong kiện');
+    else toast('Đã tìm thấy chi tiết');
+  }catch(e){toast('Lỗi kết nối')}
+}
+async function themVaoKien(){
+  if(!activeKien||!currentItem)return;
+  try{
+    const res=await fetch(API,{method:'POST',body:JSON.stringify({action:'themVaoKien',maKien:activeKien.maKien,tenKien:activeKien.tenKien,index:currentItem.index,nguoiQuet:'',})});
+    const d=await res.json();
+    if(d.success){
+      history.unshift({time:new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}),maKien:activeKien.maKien,index:currentItem.index,label:currentItem.label});
+      if(history.length>100)history.pop();localStorage.setItem('donggoi_history',JSON.stringify(history));
+      document.getElementById('resultBox').style.display='none';currentItem=null;toast('Đã thêm vào kiện');
+    } else toast(d.error||'Không lưu được');
+  }catch(e){toast('Lỗi kết nối')}
+}
+function renderHistory(){
+  document.getElementById('historyCount').textContent=history.length+' lần quét';
+  const el=document.getElementById('historyList');
+  if(!history.length){el.innerHTML='<div class="empty">Chưa có lịch sử.</div>';return}
+  el.innerHTML=history.map(h=>`<div class="log-item"><b>${h.time} · ${h.maKien} · QR #${h.index}</b><div class="meta">${h.label||''}</div></div>`).join('');
+}
+loadKien();
+</script>
+</body>
+</html>
