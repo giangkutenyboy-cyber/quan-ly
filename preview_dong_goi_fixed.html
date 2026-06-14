@@ -57,6 +57,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--main)}
         <div class="row">
           <button class="btn btn-outline" onclick="openTaoKien()">+ Tạo kiện</button>
           <button class="btn btn-outline" onclick="loadKien(true)">Chọn kiện</button>
+          <button class="btn btn-outline" style="border-color:#16834A; color:#16834A;" onclick="inTemKien()">🖨️ In tem</button>
         </div>
         <div id="chonKienBox" style="display:none;margin-top:10px">
           <label>Chọn kiện</label>
@@ -212,7 +213,6 @@ function startCamera(){
   document.getElementById('btnCamera').textContent='Tắt camera';
   document.getElementById('btnCamera').className='btn btn-outline';
   document.getElementById('scanLine').style.display='block';
-  // Quét liên tục, không tắt camera khi tìm thấy QR
   scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:220,height:220}},txt=>{onScan(txt.trim())},()=>{})
     .then(()=>cameraOn=true).catch(()=>toast('Không mở được camera'));
 }
@@ -234,7 +234,6 @@ async function onScan(index){
     const d=await res.json();
     if(!d.found){toast('Không tìm thấy QR');return}
     
-    // Đẩy thông tin tra cứu thành công vào danh sách tạm
     addToBatch(d);
     toast('Đã thêm vào danh sách tạm');
   }catch(e){toast('Lỗi kết nối')}
@@ -307,7 +306,6 @@ async function xacNhanHangLoat(){
   try{
     toast('Đang lưu hàng loạt...');
 
-    // Gửi bằng phương thức POST an toàn để tránh quá tải URL địa chỉ
     const res = await fetch(API, {
       method: 'POST',
       mode: 'cors',
@@ -325,14 +323,12 @@ async function xacNhanHangLoat(){
     if(d.success){
       toast(`Đã thêm ${d.added} chi tiết vào kiện`);
       
-      // Đồng bộ lịch sử cục bộ cho thiết bị
       items.forEach(x => {
         history.unshift({time: new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}), maKien: activeKien.maKien, index: x.index, label: x.label});
       });
       if(history.length>100) history.splice(100);
       localStorage.setItem('donggoi_history', JSON.stringify(history));
 
-      // Chỉ giữ lại các chi tiết bị đánh dấu 'loai'
       batchItems = batchItems.filter(x => x.status !== 'ok');
       localStorage.setItem('batch_items', JSON.stringify(batchItems));
       
@@ -344,6 +340,18 @@ async function xacNhanHangLoat(){
   }catch(e){
     toast('Lỗi kết nối');
   }
+}
+
+// ------ HÀM IN TEM KIỆN TRÊN FRONTEND ------
+function inTemKien(){
+   if(!activeKien){
+      toast('Chưa chọn kiện');
+      return;
+   }
+   window.open(
+      `${API}?action=inTem&maKien=${encodeURIComponent(activeKien.maKien)}`,
+      '_blank'
+   );
 }
 
 function renderHistory(){
