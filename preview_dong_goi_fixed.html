@@ -79,6 +79,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--main)}
         <div class="row" style="margin-top:10px">
           <button class="btn btn-outline" onclick="nhapTay()">Nhập tay</button>
           <button class="btn btn-main" id="btnCamera" onclick="toggleCamera()">Bật camera</button>
+          <button class="btn btn-outline" id="btnFlash" onclick="toggleFlash()">🔦 Đèn</button>
         </div>
       </div>
     </div>
@@ -132,6 +133,9 @@ let history = JSON.parse(localStorage.getItem('donggoi_history') || '[]');
 // SỬA LỖI 1: Biến kiểm soát thời gian quét lặp
 let lastScan = '';
 let lastScanTime = 0;
+let scanLock = false;
+let videoTrack = null;
+let flashOn = false;
 
 // THAY ĐỔI 3: Biến lưu toàn bộ danh sách kiện để lọc
 let allKienItems = [];
@@ -239,40 +243,105 @@ function renderKien(items){
 function toggleCamera(){cameraOn?stopCamera():startCamera()}
 
 function startCamera(){
-  // SỬA LỖI 2: Ngăn tạo nhiều instance trùng lặp của Html5Qrcode
   if(!scanner){
-    scanner=new Html5Qrcode('reader');
+    scanner = new Html5Qrcode('reader');
   }
+
   document.getElementById('btnCamera').textContent='Tắt camera';
   document.getElementById('btnCamera').className='btn btn-outline';
   document.getElementById('scanLine').style.display='block';
-  
-  scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:220,height:220}},txt=>{onScan(txt.trim())},()=>{})
-    .then(()=>cameraOn=true).catch(()=>toast('Không mở được camera'));
+
+  scanner.start(
+    { facingMode:'environment' },
+    { fps:30, qrbox:{width:300,height:180}, aspectRatio:1.777 },
+    txt => { onScanFast(txt.trim()); },
+    () => {}
+  ).then(() => {
+    cameraOn = true;
+    const video = document.querySelector('#reader video');
+    if(video && video.srcObject){
+      const tracks = video.srcObject.getVideoTracks();
+      videoTrack = tracks && tracks.length ? tracks[0] : null;
+    }
+  }).catch(() => toast('Không mở được camera'));
 }
 
 function stopCamera(){
   if(scanner&&cameraOn){scanner.stop().catch(()=>{});cameraOn=false}
+  // Reset flash khi tắt camera
+  flashOn = false;
+  videoTrack = null;
+  document.getElementById('btnFlash').textContent = '🔦 Đèn';
   document.getElementById('btnCamera').textContent='Bật camera';
   document.getElementById('btnCamera').className='btn btn-main';
   document.getElementById('scanLine').style.display='none';
 }
 
+async function toggleFlash(){
+  if(!videoTrack){ toast('Camera chưa bật'); return; }
+
+  const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+  if(!caps.torch){ toast('Máy không hỗ trợ bật đèn'); return; }
+
+  flashOn = !flashOn;
+  try{
+    await videoTrack.applyConstraints({ advanced:[{torch:flashOn}] });
+    document.getElementById('btnFlash').textContent = flashOn ? '💡 Tắt đèn' : '🔦 Đèn';
+    toast(flashOn ? 'Đã bật đèn' : 'Đã tắt đèn');
+  }catch(e){
+    toast('Không bật được đèn');
+  }
+}
+
 function nhapTay(){stopCamera();const v=prompt('Nhập mã QR / index');if(v)onScan(v.trim())}
+
+async function onScanFast(index){
+  if(!activeKien){ toast('Hãy tạo hoặc chọn kiện trước'); return; }
+
+  const now = Date.now();
+  if(index === lastScan && now - lastScanTime < 500) return;
+  if(batchItems.find(x => String(x.index) === String(index))) return;
+  if(scanLock) return;
+
+  lastScan = index;
+  lastScanTime = now;
+  scanLock = true;
+
+  try{
+    const res = await fetch(
+      `${API}?action=lookup&index=${encodeURIComponent(index)}&maKien=${encodeURIComponent(activeKien.maKien)}`
+    );
+    const d = await res.json();
+    if(d.found){
+      addToBatch(d);
+      beep();
+      toast('Đã quét QR #' + index);
+    }
+  }catch(e){
+    toast('Lỗi kết nối');
+  }finally{
+    setTimeout(() => { scanLock = false; }, 120);
+  }
+}
 
 async function onScan(index){
   if(!activeKien){toast('Hãy tạo hoặc chọn kiện trước');return}
   
   // SỬA LỖI 1: Bộ lọc Debounce chặn spam request liên tục trong 1.5 giây
   const now = Date.now();
-  if(index === lastScan && now - lastScanTime < 1500){
+  if(index === lastScan && now - lastScanTime < 700){
       return;
   }
   lastScan = index;
   lastScanTime = now;
 
+  // Đã có trong danh sách tạm → bỏ qua, không gọi API
+  if(batchItems.find(x => String(x.index) === String(index))){
+    return;
+  }
+
   try{
-    toast('Đang tra QR...');
+    // toast('Đang tra QR...'); // bỏ để không làm chậm cảm giác thao tác
     const res=await fetch(`${API}?action=lookup&index=${encodeURIComponent(index)}&maKien=${encodeURIComponent(activeKien.maKien)}`);
     const d=await res.json();
     if(!d.found){toast('Không tìm thấy QR');return}
@@ -426,13 +495,13 @@ function beep(){
     osc.frequency.value = 900;
 
     gain.gain.setValueAtTime(0.12, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
 
     osc.start();
-    osc.stop(ctx.currentTime + 0.12);
+    osc.stop(ctx.currentTime + 0.06);
   }catch(e){}
 }
 </script>
