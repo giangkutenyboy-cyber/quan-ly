@@ -314,18 +314,59 @@ async function onScan(index){
   lastScan = index;
   lastScanTime = now;
 
-  // Thêm thẳng vào batch, KHÔNG gọi API — API chỉ gọi khi bấm "Xác nhận vào kiện"
-  batchItems.unshift({
+  const item = {
     index: index,
-    label: '',
+    label: 'Đang lấy thông tin...',
     tenKien: '',
     kichThuoc: '',
     vatLieu: '',
+    trung: false,
+    loading: true,
     status: 'ok'
-  });
+  };
+
+  batchItems.unshift(item);
   localStorage.setItem('batch_items', JSON.stringify(batchItems));
   renderBatch();
   beep();
+
+  layThongTinNen(index);
+}
+
+async function layThongTinNen(index){
+  try{
+    const res = await fetch(
+      `${API}?action=lookup&index=${encodeURIComponent(index)}&maKien=${encodeURIComponent(activeKien.maKien)}`
+    );
+    const d = await res.json();
+    const i = batchItems.findIndex(x => String(x.index) === String(index));
+    if(i === -1) return;
+
+    if(!d.found){
+      batchItems[i].label   = 'Không tìm thấy trong Data';
+      batchItems[i].loading = false;
+      batchItems[i].status  = 'loai';
+    } else {
+      batchItems[i].label    = d.label    || '';
+      batchItems[i].tenKien  = d.tenKien  || '';
+      batchItems[i].kichThuoc= d.kichThuoc|| '';
+      batchItems[i].vatLieu  = d.vatLieu  || '';
+      batchItems[i].trung    = !!d.trung;
+      batchItems[i].loading  = false;
+      if(d.trung) batchItems[i].status = 'loai';
+    }
+
+    localStorage.setItem('batch_items', JSON.stringify(batchItems));
+    renderBatch();
+  }catch(e){
+    const i = batchItems.findIndex(x => String(x.index) === String(index));
+    if(i !== -1){
+      batchItems[i].label   = 'Lỗi lấy thông tin';
+      batchItems[i].loading = false;
+      localStorage.setItem('batch_items', JSON.stringify(batchItems));
+      renderBatch();
+    }
+  }
 }
 
 // =====================================================
@@ -362,12 +403,33 @@ function renderBatch(){
   }
 
   el.innerHTML = batchItems.map((x, i) => `
-    <div class="log-item" style="border: 1px solid var(--line); margin-bottom: 8px;">
+    <div class="log-item" style="
+      border:1px solid ${x.trung ? 'var(--err)' : 'var(--line)'};
+      margin-bottom:8px;
+      opacity:${x.loading ? '.75' : '1'};
+    ">
       <b>QR #${x.index}</b>
-      <div class="meta">${x.label || ''} | ${x.kichThuoc || ''}</div>
+      <div class="meta">
+        ${x.label || ''}
+        ${x.kichThuoc ? ' | ' + x.kichThuoc : ''}
+        ${x.vatLieu  ? ' | ' + x.vatLieu  : ''}
+      </div>
+
+      ${x.trung ? `
+        <div style="margin-top:6px">
+          <span class="pill pill-err">Đã có trong kiện / trùng</span>
+        </div>
+      ` : ''}
+
+      ${x.loading ? `
+        <div style="margin-top:6px">
+          <span class="pill pill-warn">Đang lấy thông tin...</span>
+        </div>
+      ` : ''}
+
       <div class="row" style="margin-top:8px">
-        <button class="btn ${x.status === 'ok' ? 'btn-main' : 'btn-outline'}" onclick="setBatchStatus(${i}, 'ok')">Đạt</button>
-        <button class="btn ${x.status === 'loai' ? 'btn-red' : 'btn-outline'}" onclick="setBatchStatus(${i}, 'loai')">Loại</button>
+        <button class="btn ${x.status === 'ok' ? 'btn-main' : 'btn-outline'}" onclick="setBatchStatus(${i}, 'ok')">Giữ</button>
+        <button class="btn btn-red" onclick="setBatchStatus(${i}, 'loai')">Loại</button>
       </div>
     </div>
   `).join('');
