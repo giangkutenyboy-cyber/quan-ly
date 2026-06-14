@@ -96,6 +96,8 @@ input:focus,select:focus,textarea:focus{border-color:var(--main)}
 <div class="screen" id="sc-kien">
   <div class="hdr"><div class="hdr-title">Kiện hàng</div><div class="hdr-sub" id="kienSummary">Danh sách kiện đóng gói</div></div>
   <div class="body">
+    <!-- THAY ĐỔI 3: Ô tìm kiếm kiện hàng -->
+    <input id="searchKien" placeholder="Tìm mã kiện hoặc tên kiện..." oninput="filterKien()" style="margin-bottom:10px">
     <button class="btn btn-outline" onclick="loadKien()">↻ Làm mới</button>
     <div id="kienList"><div class="empty">Đang tải...</div></div>
   </div>
@@ -130,6 +132,9 @@ let history = JSON.parse(localStorage.getItem('donggoi_history') || '[]');
 // SỬA LỖI 1: Biến kiểm soát thời gian quét lặp
 let lastScan = '';
 let lastScanTime = 0;
+
+// THAY ĐỔI 3: Biến lưu toàn bộ danh sách kiện để lọc
+let allKienItems = [];
 
 updateActiveText();
 renderBatch();
@@ -174,6 +179,8 @@ async function loadKien(showSelect=false){
     const res=await fetch(`${API}?action=listKien`);
     const d=await res.json();
     const items=d.items||[];
+    // THAY ĐỔI 3: Lưu toàn bộ danh sách để dùng khi lọc
+    allKienItems = items;
     if(showSelect){
       const sl=document.getElementById('selectKien');
       sl.innerHTML='<option value="">-- Chọn kiện --</option>'+items.map(k=>`<option value="${k.Ma_Kien}">${k.Ma_Kien} - ${k.Ten_Kien}</option>`).join('');
@@ -184,28 +191,47 @@ async function loadKien(showSelect=false){
 }
 
 function setActiveKien(ma){
-  const k=(window.kienItems||[]).find(x=>String(x.Ma_Kien)===String(ma));
+  const k=(window.kienItems||allKienItems).find(x=>String(x.Ma_Kien)===String(ma));
   if(!k)return;
   activeKien={maKien:k.Ma_Kien,tenKien:k.Ten_Kien};
   localStorage.setItem('active_kien',JSON.stringify(activeKien));
   updateActiveText(); toast('Đã chọn kiện '+k.Ma_Kien);
 }
 
+// THAY ĐỔI 3: Hàm lọc kiện theo từ khoá tìm kiếm
+function filterKien(){
+  const q = document.getElementById('searchKien').value.toLowerCase().trim();
+  const filtered = allKienItems.filter(k =>
+    String(k.Ma_Kien || '').toLowerCase().includes(q) ||
+    String(k.Ten_Kien || '').toLowerCase().includes(q)
+  );
+  renderKien(filtered);
+}
+
 function renderKien(items){
   const el=document.getElementById('kienList');
   if(!items.length){el.innerHTML='<div class="empty">Chưa có kiện.</div>';return}
   let du=0,dang=0;
+  // THAY ĐỔI 2: Mỗi kiện có nút Chọn kiện và In tem riêng
   el.innerHTML=items.map(k=>{
     const tong=Number(k.Tong_Tam||0), da=Number(k.Da_Quet||0), thieu=Math.max(tong-da,0);
     const pct=tong?Math.min(100,Math.round(da/tong*100)):0;
     const done= tong>0 && thieu===0;
     done?du++:dang++;
-    return `<div class="kien-item" onclick="setActiveKien('${k.Ma_Kien}')">
-      <div class="kien-title">${k.Ma_Kien} - ${k.Ten_Kien}</div>
-      <div class="meta">${da}/${tong} tấm · còn thiếu ${thieu}</div>
-      <div style="margin-top:6px"><span class="pill ${done?'pill-ok':'pill-warn'}">${done?'Đủ - đóng được':'Đang đóng'}</span></div>
-      <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
-    </div>`
+    return `<div class="kien-item">
+  <div onclick="xemChiTietKien('${k.Ma_Kien}')">
+    <div class="kien-title">${k.Ma_Kien} - ${k.Ten_Kien}</div>
+    <div class="meta">${da}/${tong} tấm · còn thiếu ${thieu}</div>
+    <div style="margin-top:6px">
+      <span class="pill ${done?'pill-ok':'pill-warn'}">${done?'Đủ - đóng được':'Đang đóng'}</span>
+    </div>
+    <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <button class="btn btn-outline" onclick="setActiveKien('${k.Ma_Kien}')">Chọn kiện</button>
+    <button class="btn btn-outline" onclick="inTemKien('${k.Ma_Kien}')">🖨️ In tem</button>
+  </div>
+</div>`;
   }).join('');
   document.getElementById('kienSummary').textContent=`${du} kiện đủ · ${dang} kiện đang đóng`;
 }
@@ -252,6 +278,12 @@ async function onScan(index){
     if(!d.found){toast('Không tìm thấy QR');return}
     
     addToBatch(d);
+
+    // THAY ĐỔI 4: Rung nhẹ khi quét được tem thành công
+    if(navigator.vibrate){
+      navigator.vibrate(120);
+    }
+
     toast('Đã thêm vào danh sách tạm');
   }catch(e){toast('Lỗi kết nối')}
 }
@@ -359,13 +391,16 @@ async function xacNhanHangLoat(){
   }
 }
 
-// SỬA LỖI 3: Chuyển đổi sang location.href chống chặn cửa sổ trên Safari iOS (iPhone)
-function inTemKien(){
-   if(!activeKien){
-      toast('Chưa chọn kiện');
-      return;
-   }
-   location.href = `${API}?action=inTem&maKien=${encodeURIComponent(activeKien.maKien)}`;
+// THAY ĐỔI 1: Hàm in tem dùng window.open để mở đúng giao diện in trên iPhone
+// Nhận thêm tham số maKien để in từ màn hình Kiện hàng
+function inTemKien(maKien = null){
+  const kienCanIn = maKien || (activeKien ? activeKien.maKien : '');
+  if(!kienCanIn){
+    toast('Chưa chọn kiện để in');
+    return;
+  }
+  const url = `${API}?action=inTem&maKien=${encodeURIComponent(kienCanIn)}`;
+  window.open(url, '_blank');
 }
 
 function renderHistory(){
