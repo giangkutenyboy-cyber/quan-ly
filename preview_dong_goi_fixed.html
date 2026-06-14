@@ -82,17 +82,11 @@ input:focus,select:focus,textarea:focus{border-color:var(--main)}
       </div>
     </div>
 
-    <div id="resultBox" style="display:none">
-      <div class="card">
-        <div class="card-head">Thông tin chi tiết</div>
-        <div class="card-body">
-          <span class="pill pill-ok" id="qrBadge">QR</span>
-          <div class="info"><span class="k">Tên kiện</span><span class="v" id="rKien"></span></div>
-          <div class="info"><span class="k">Chi tiết</span><span class="v" id="rLabel"></span></div>
-          <div class="info"><span class="k">Kích thước</span><span class="v" id="rSize"></span></div>
-          <div class="info"><span class="k">Vật liệu</span><span class="v" id="rMat"></span></div>
-          <button class="btn btn-main" style="margin-top:12px" onclick="themVaoKien()">Thêm vào kiện đang đóng</button>
-        </div>
+    <div class="card">
+      <div class="card-head">Danh sách quét tạm</div>
+      <div class="card-body">
+        <div id="batchList" class="empty">Chưa có chi tiết nào.</div>
+        <button class="btn btn-main" style="margin-top:12px" onclick="xacNhanHangLoat()">Xác nhận vào kiện</button>
       </div>
     </div>
   </div>
@@ -125,13 +119,15 @@ input:focus,select:focus,textarea:focus{border-color:var(--main)}
 <div class="toast" id="toast"></div>
 
 <script>
-// DÁN LINK WEB APP APPS SCRIPT VÀO ĐÂY
 const API = 'https://script.google.com/macros/s/AKfycbws8sm0KomqsPlHK9Dq6ivY05AhpZHAJujGuPTdiSZsUPf9YHUlpIoJWqUcvN1_SHwiDA/exec';
 
 let activeKien = JSON.parse(localStorage.getItem('active_kien') || 'null');
 let currentItem = null, scanner = null, cameraOn = false;
+let batchItems = JSON.parse(localStorage.getItem('batch_items') || '[]');
 let history = JSON.parse(localStorage.getItem('donggoi_history') || '[]');
+
 updateActiveText();
+renderBatch();
 
 function go(s){
   document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
@@ -141,14 +137,18 @@ function go(s){
   if(s==='kien') loadKien();
   if(s==='lichsu') renderHistory();
 }
+
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(window.tt);window.tt=setTimeout(()=>t.classList.remove('show'),2200)}
+
 function updateActiveText(){
   document.getElementById('activeKienText').textContent = activeKien ? `Kiện đang đóng: ${activeKien.maKien} - ${activeKien.tenKien}` : 'Chưa chọn kiện đang đóng';
 }
+
 function openTaoKien(){
   document.getElementById('taoKienBox').style.display='block';
   document.getElementById('chonKienBox').style.display='none';
 }
+
 async function taoKien(){
   const ma=document.getElementById('maKienMoi').value.trim();
   const ten=document.getElementById('tenKienMoi').value.trim();
@@ -162,6 +162,7 @@ async function taoKien(){
     } else toast(d.error||'Không tạo được kiện');
   }catch(e){toast('Lỗi kết nối')}
 }
+
 async function loadKien(showSelect=false){
   if(showSelect) document.getElementById('chonKienBox').style.display='block';
   try{
@@ -176,6 +177,7 @@ async function loadKien(showSelect=false){
     renderKien(items);
   }catch(e){document.getElementById('kienList').innerHTML='<div class="empty">Lỗi tải dữ liệu.</div>'}
 }
+
 function setActiveKien(ma){
   const k=(window.kienItems||[]).find(x=>String(x.Ma_Kien)===String(ma));
   if(!k)return;
@@ -183,6 +185,7 @@ function setActiveKien(ma){
   localStorage.setItem('active_kien',JSON.stringify(activeKien));
   updateActiveText(); toast('Đã chọn kiện '+k.Ma_Kien);
 }
+
 function renderKien(items){
   const el=document.getElementById('kienList');
   if(!items.length){el.innerHTML='<div class="empty">Chưa có kiện.</div>';return}
@@ -201,22 +204,28 @@ function renderKien(items){
   }).join('');
   document.getElementById('kienSummary').textContent=`${du} kiện đủ · ${dang} kiện đang đóng`;
 }
+
 function toggleCamera(){cameraOn?stopCamera():startCamera()}
+
 function startCamera(){
   scanner=new Html5Qrcode('reader');
   document.getElementById('btnCamera').textContent='Tắt camera';
   document.getElementById('btnCamera').className='btn btn-outline';
   document.getElementById('scanLine').style.display='block';
-  scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:220,height:220}},txt=>{stopCamera();onScan(txt.trim())},()=>{})
+  // Quét liên tục, không tắt camera khi tìm thấy QR
+  scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:220,height:220}},txt=>{onScan(txt.trim())},()=>{})
     .then(()=>cameraOn=true).catch(()=>toast('Không mở được camera'));
 }
+
 function stopCamera(){
   if(scanner&&cameraOn){scanner.stop().catch(()=>{});cameraOn=false}
   document.getElementById('btnCamera').textContent='Bật camera';
   document.getElementById('btnCamera').className='btn btn-main';
   document.getElementById('scanLine').style.display='none';
 }
+
 function nhapTay(){stopCamera();const v=prompt('Nhập mã QR / index');if(v)onScan(v.trim())}
+
 async function onScan(index){
   if(!activeKien){toast('Hãy tạo hoặc chọn kiện trước');return}
   try{
@@ -224,37 +233,126 @@ async function onScan(index){
     const res=await fetch(`${API}?action=lookup&index=${encodeURIComponent(index)}&maKien=${encodeURIComponent(activeKien.maKien)}`);
     const d=await res.json();
     if(!d.found){toast('Không tìm thấy QR');return}
-    currentItem=d;
-    document.getElementById('resultBox').style.display='block';
-    document.getElementById('qrBadge').textContent='QR #'+d.index;
-    document.getElementById('rKien').textContent=d.tenKien||'';
-    document.getElementById('rLabel').textContent=d.label||'';
-    document.getElementById('rSize').textContent=d.kichThuoc||'';
-    document.getElementById('rMat').textContent=d.vatLieu||'';
-    if(d.trung) toast('⚠ QR này đã có trong kiện');
-    else toast('Đã tìm thấy chi tiết');
+    
+    // Đẩy thông tin tra cứu thành công vào danh sách tạm
+    addToBatch(d);
+    toast('Đã thêm vào danh sách tạm');
   }catch(e){toast('Lỗi kết nối')}
 }
-async function themVaoKien(){
-  if(!activeKien||!currentItem)return;
+
+// =====================================================
+// LOGIC DANH SÁCH TẠM & XỬ LÝ HÀNG LOẠT
+// =====================================================
+
+function addToBatch(item){
+  const exists = batchItems.find(x => String(x.index) === String(item.index));
+  if(exists){
+    toast('QR này đã có trong danh sách tạm');
+    return;
+  }
+
+  batchItems.unshift({
+    index: item.index,
+    label: item.label,
+    tenKien: item.tenKien,
+    kichThuoc: item.kichThuoc,
+    vatLieu: item.vatLieu,
+    status: 'ok'
+  });
+
+  localStorage.setItem('batch_items', JSON.stringify(batchItems));
+  renderBatch();
+}
+
+function renderBatch(){
+  const el = document.getElementById('batchList');
+  if(!el) return;
+
+  if(!batchItems.length){
+    el.innerHTML = '<div class="empty">Chưa có chi tiết nào.</div>';
+    return;
+  }
+
+  el.innerHTML = batchItems.map((x, i) => `
+    <div class="log-item" style="border: 1px solid var(--line); margin-bottom: 8px;">
+      <b>QR #${x.index}</b>
+      <div class="meta">${x.label || ''} | ${x.kichThuoc || ''}</div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn ${x.status === 'ok' ? 'btn-main' : 'btn-outline'}" onclick="setBatchStatus(${i}, 'ok')">Đạt</button>
+        <button class="btn ${x.status === 'loai' ? 'btn-red' : 'btn-outline'}" onclick="setBatchStatus(${i}, 'loai')">Loại</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function setBatchStatus(i, status){
+  batchItems[i].status = status;
+  localStorage.setItem('batch_items', JSON.stringify(batchItems));
+  renderBatch();
+}
+
+async function xacNhanHangLoat(){
+  if(!activeKien){
+    toast('Chưa chọn kiện');
+    return;
+  }
+
+  const items = batchItems.filter(x => x.status === 'ok');
+
+  if(!items.length){
+    toast('Không có chi tiết đạt để thêm');
+    return;
+  }
+
   try{
-    const res = await fetch(
-`${API}?action=themVaoKien&maKien=${encodeURIComponent(activeKien.maKien)}&tenKien=${encodeURIComponent(activeKien.tenKien)}&index=${encodeURIComponent(currentItem.index)}`
-);
-    const d=await res.json();
+    toast('Đang lưu hàng loạt...');
+
+    // Gửi bằng phương thức POST an toàn để tránh quá tải URL địa chỉ
+    const res = await fetch(API, {
+      method: 'POST',
+      mode: 'cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'themHangLoat',
+        maKien: activeKien.maKien,
+        tenKien: activeKien.tenKien,
+        items: items
+      })
+    });
+
+    const d = await res.json();
+
     if(d.success){
-      history.unshift({time:new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}),maKien:activeKien.maKien,index:currentItem.index,label:currentItem.label});
-      if(history.length>100)history.pop();localStorage.setItem('donggoi_history',JSON.stringify(history));
-      document.getElementById('resultBox').style.display='none';currentItem=null;toast('Đã thêm vào kiện');
-    } else toast(d.error||'Không lưu được');
-  }catch(e){toast('Lỗi kết nối')}
+      toast(`Đã thêm ${d.added} chi tiết vào kiện`);
+      
+      // Đồng bộ lịch sử cục bộ cho thiết bị
+      items.forEach(x => {
+        history.unshift({time: new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}), maKien: activeKien.maKien, index: x.index, label: x.label});
+      });
+      if(history.length>100) history.splice(100);
+      localStorage.setItem('donggoi_history', JSON.stringify(history));
+
+      // Chỉ giữ lại các chi tiết bị đánh dấu 'loai'
+      batchItems = batchItems.filter(x => x.status !== 'ok');
+      localStorage.setItem('batch_items', JSON.stringify(batchItems));
+      
+      renderBatch();
+      loadKien();
+    } else {
+      toast(d.error || 'Không lưu được');
+    }
+  }catch(e){
+    toast('Lỗi kết nối');
+  }
 }
+
 function renderHistory(){
   document.getElementById('historyCount').textContent=history.length+' lần quét';
   const el=document.getElementById('historyList');
   if(!history.length){el.innerHTML='<div class="empty">Chưa có lịch sử.</div>';return}
   el.innerHTML=history.map(h=>`<div class="log-item"><b>${h.time} · ${h.maKien} · QR #${h.index}</b><div class="meta">${h.label||''}</div></div>`).join('');
 }
+
 loadKien();
 </script>
 </body>
