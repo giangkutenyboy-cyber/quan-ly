@@ -30,8 +30,10 @@ input:focus,select:focus,textarea:focus{border-color:var(--main)}
 .btn-gray{background:#eee;color:#777;pointer-events:none}.btn-red{background:var(--err);color:#fff}
 .pill{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:800}
 .pill-ok{background:#E8F6EF;color:var(--ok)}.pill-warn{background:#FFF0D9;color:var(--warn)}.pill-err{background:#FDECEA;color:var(--err)}
-.scan-box{position:relative;background:#111;border-radius:14px;overflow:hidden;height:260px;display:flex;align-items:center;justify-content:center}
-#reader{width:100%!important;height:260px!important}.scan-line{position:absolute;left:20px;right:20px;height:2px;background:linear-gradient(90deg,transparent,#fff,transparent);animation:scan 1.8s linear infinite;display:none}
+.scan-box{position:relative;background:#111;border-radius:14px;overflow:hidden;height:260px;display:flex;align-items:flex-start;justify-content:center;padding-top:0}
+#reader{width:100%!important;transform:translateY(-76px)}
+#reader video{width:100%!important;height:360px!important;object-fit:cover!important}
+.scan-line{position:absolute;left:20px;right:20px;height:2px;background:linear-gradient(90deg,transparent,#fff,transparent);animation:scan 1.8s linear infinite;display:none}
 @keyframes scan{0%{top:18px}100%{top:calc(100% - 18px)}}
 .info{display:flex;gap:8px;margin:7px 0}.k{min-width:80px;color:var(--muted);font-size:12px}.v{font-size:14px;font-weight:700;line-height:1.35}
 .kien-item,.log-item{background:#fff;border-radius:14px;box-shadow:var(--shadow);padding:13px;margin-bottom:10px}
@@ -253,8 +255,8 @@ function startCamera(){
 
   scanner.start(
     { facingMode:'environment' },
-    { fps:30, qrbox:{width:300,height:180}, aspectRatio:1.777 },
-    txt => { onScanFast(txt.trim()); },
+    { fps:30, qrbox:{width:320,height:180}, aspectRatio:1.777 },
+    txt => { onScan(txt.trim()); },
     () => {}
   ).then(() => {
     cameraOn = true;
@@ -262,6 +264,13 @@ function startCamera(){
     if(video && video.srcObject){
       const tracks = video.srcObject.getVideoTracks();
       videoTrack = tracks && tracks.length ? tracks[0] : null;
+    }
+    // Zoom x2 nếu máy hỗ trợ
+    if(videoTrack){
+      const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+      if(caps.zoom){
+        videoTrack.applyConstraints({ advanced:[{zoom:2}] }).catch(()=>{});
+      }
     }
   }).catch(() => toast('Không mở được camera'));
 }
@@ -295,61 +304,28 @@ async function toggleFlash(){
 
 function nhapTay(){stopCamera();const v=prompt('Nhập mã QR / index');if(v)onScan(v.trim())}
 
-async function onScanFast(index){
+async function onScan(index){
   if(!activeKien){ toast('Hãy tạo hoặc chọn kiện trước'); return; }
 
   const now = Date.now();
   if(index === lastScan && now - lastScanTime < 500) return;
   if(batchItems.find(x => String(x.index) === String(index))) return;
-  if(scanLock) return;
 
   lastScan = index;
   lastScanTime = now;
-  scanLock = true;
 
-  try{
-    const res = await fetch(
-      `${API}?action=lookup&index=${encodeURIComponent(index)}&maKien=${encodeURIComponent(activeKien.maKien)}`
-    );
-    const d = await res.json();
-    if(d.found){
-      addToBatch(d);
-      beep();
-      toast('Đã quét QR #' + index);
-    }
-  }catch(e){
-    toast('Lỗi kết nối');
-  }finally{
-    setTimeout(() => { scanLock = false; }, 120);
-  }
-}
-
-async function onScan(index){
-  if(!activeKien){toast('Hãy tạo hoặc chọn kiện trước');return}
-  
-  // SỬA LỖI 1: Bộ lọc Debounce chặn spam request liên tục trong 1.5 giây
-  const now = Date.now();
-  if(index === lastScan && now - lastScanTime < 700){
-      return;
-  }
-  lastScan = index;
-  lastScanTime = now;
-
-  // Đã có trong danh sách tạm → bỏ qua, không gọi API
-  if(batchItems.find(x => String(x.index) === String(index))){
-    return;
-  }
-
-  try{
-    // toast('Đang tra QR...'); // bỏ để không làm chậm cảm giác thao tác
-    const res=await fetch(`${API}?action=lookup&index=${encodeURIComponent(index)}&maKien=${encodeURIComponent(activeKien.maKien)}`);
-    const d=await res.json();
-    if(!d.found){toast('Không tìm thấy QR');return}
-    
-    addToBatch(d);
-    beep();
-    toast('Đã thêm vào danh sách tạm');
-  }catch(e){toast('Lỗi kết nối')}
+  // Thêm thẳng vào batch, KHÔNG gọi API — API chỉ gọi khi bấm "Xác nhận vào kiện"
+  batchItems.unshift({
+    index: index,
+    label: '',
+    tenKien: '',
+    kichThuoc: '',
+    vatLieu: '',
+    status: 'ok'
+  });
+  localStorage.setItem('batch_items', JSON.stringify(batchItems));
+  renderBatch();
+  beep();
 }
 
 // =====================================================
