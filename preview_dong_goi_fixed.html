@@ -127,6 +127,10 @@ let currentItem = null, scanner = null, cameraOn = false;
 let batchItems = JSON.parse(localStorage.getItem('batch_items') || '[]');
 let history = JSON.parse(localStorage.getItem('donggoi_history') || '[]');
 
+// SỬA LỖI 1: Biến kiểm soát thời gian quét lặp
+let lastScan = '';
+let lastScanTime = 0;
+
 updateActiveText();
 renderBatch();
 
@@ -209,10 +213,14 @@ function renderKien(items){
 function toggleCamera(){cameraOn?stopCamera():startCamera()}
 
 function startCamera(){
-  scanner=new Html5Qrcode('reader');
+  // SỬA LỖI 2: Ngăn tạo nhiều instance trùng lặp của Html5Qrcode
+  if(!scanner){
+    scanner=new Html5Qrcode('reader');
+  }
   document.getElementById('btnCamera').textContent='Tắt camera';
   document.getElementById('btnCamera').className='btn btn-outline';
   document.getElementById('scanLine').style.display='block';
+  
   scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:220,height:220}},txt=>{onScan(txt.trim())},()=>{})
     .then(()=>cameraOn=true).catch(()=>toast('Không mở được camera'));
 }
@@ -228,6 +236,15 @@ function nhapTay(){stopCamera();const v=prompt('Nhập mã QR / index');if(v)onS
 
 async function onScan(index){
   if(!activeKien){toast('Hãy tạo hoặc chọn kiện trước');return}
+  
+  // SỬA LỖI 1: Bộ lọc Debounce chặn spam request liên tục trong 1.5 giây
+  const now = Date.now();
+  if(index === lastScan && now - lastScanTime < 1500){
+      return;
+  }
+  lastScan = index;
+  lastScanTime = now;
+
   try{
     toast('Đang tra QR...');
     const res=await fetch(`${API}?action=lookup&index=${encodeURIComponent(index)}&maKien=${encodeURIComponent(activeKien.maKien)}`);
@@ -342,16 +359,13 @@ async function xacNhanHangLoat(){
   }
 }
 
-// ------ HÀM IN TEM KIỆN TRÊN FRONTEND ------
+// SỬA LỖI 3: Chuyển đổi sang location.href chống chặn cửa sổ trên Safari iOS (iPhone)
 function inTemKien(){
    if(!activeKien){
       toast('Chưa chọn kiện');
       return;
    }
-   window.open(
-      `${API}?action=inTem&maKien=${encodeURIComponent(activeKien.maKien)}`,
-      '_blank'
-   );
+   location.href = `${API}?action=inTem&maKien=${encodeURIComponent(activeKien.maKien)}`;
 }
 
 function renderHistory(){
